@@ -1,13 +1,18 @@
 package cmd
 
 import (
-	"github.com/dgraph-io/badger"
+	"bufio"
+	"crypto/rand"
+	"crypto/tls"
+	"encoding/json"
+	"fmt"
+	"github.com/go-redis/redis"
 	_ "github.com/google/uuid"
 	"github.com/spf13/cobra"
 	"log"
 	"net"
-	"net/http"
-	"net/rpc"
+	"os"
+	"time"
 )
 
 var serverCmd = &cobra.Command{
@@ -24,102 +29,168 @@ func init() {
 }
 
 type Event struct {
-	Message string
-}
-
-type RegEvent struct {
-	Id   int
-	Name string
-}
-
-type Task Event
-
-func getDb() *badger.DB {
-	opts := badger.DefaultOptions
-	opts.Dir = "/tmp/badger"
-	opts.ValueDir = "/tmp/badger"
-	db, err := badger.Open(opts)
-	if err != nil {
-		log.Println(err)
-	}
-	return db
-}
-
-func (t *Task) GetNodes(args *Event, reply *Event) error {
-	log.Println("get nodes event")
-	db := getDb()
-	defer db.Close()
-	err := db.Update(func(txn *badger.Txn) error {
-		err := txn.Set([]byte("answer"), []byte("42"))
-		return err
-	})
-	if err != nil {
-		log.Println(err)
-	}
-	*reply = Event{
-		"1337",
-	}
-	return nil
-}
-
-func (t *Task) Checkin(args *Event, reply *Event) error {
-	log.Println("check in event")
-	log.Println(args)
-	db := getDb()
-	defer db.Close()
-
-	err := db.View(func(txn *badger.Txn) error {
-		item, err := txn.Get([]byte("answer"))
-		if err != nil {
-			log.Println(err)
-		}
-		log.Println(item)
-		return nil
-	})
-	if err != nil {
-		log.Println(err)
-	}
-	*reply = Event{
-		"1337",
-	}
-	return nil
-}
-
-func (t *Task) RegisterNode(args *RegEvent, reply *Event) error {
-	db := getDb()
-	defer db.Close()
-	log.Println("registering node")
-	err := db.Update(func(txn *badger.Txn) error {
-		err := txn.Set([]byte(string(args.Id)), []byte(args.Name))
-		return err
-	})
-	if err != nil {
-		log.Println()
-	}
-	*reply = Event{
-		"1337",
-	}
-	return nil
+	Id         int
+	Timestamp  time.Time
+	Action     string
+	Parameters map[string]string
+	Auth       string
 }
 
 func startServer() {
-	task := new(Task)
-	// Publish the receivers methods
-	err := rpc.Register(task)
-	if err != nil {
-		log.Println("Format of service Task isn't correct. ", err)
+	cert, err := tls.LoadX509KeyPair("cert.pem", "key.pem")
+	checkError(err)
+	config := tls.Config{Certificates: []tls.Certificate{cert}}
+
+	now := time.Now()
+	config.Time = func() time.Time { return now }
+	config.Rand = rand.Reader
+
+	service := "0.0.0.0:1337"
+
+	listener, err := tls.Listen("tcp", service, &config)
+	checkError(err)
+	log.Println("Listening")
+	for {
+		log.Println("accepting connection")
+		conn, err := listener.Accept()
+		if err != nil {
+			fmt.Println(err.Error())
+			continue
+		}
+		go handleClient(conn)
 	}
-	// Register a HTTP handler
-	rpc.HandleHTTP()
-	// Listen to TPC connections on port 1234
-	listener, e := net.Listen("tcp", ":1337")
-	if e != nil {
-		log.Println("Listen error: ", e)
+}
+
+type Response struct {
+	Id              int
+	ResponseCode    int
+	ResponseMessage string
+}
+
+func processCheckin(conn net.Conn, event Event) {
+	result := checkin(event)
+	log.Println(result)
+	if result {
+		response := Response{
+			1,
+			0,
+			"checkin successful",
+		}
+		marshaled, _ := json.Marshal(response)
+		output := []byte(string(marshaled) + "\n")
+		log.Println(output)
+		_, err := conn.Write(output)
+		if err != nil {
+			log.Println(err)
+		}
+
+	} else {
+		response := Response{
+			1,
+			1,
+			"checkin failed",
+		}
+		marshaled, _ := json.Marshal(response)
+		output := []byte(string(marshaled) + "\n")
+		log.Println(output)
+		_, err := conn.Write(output)
+		if err != nil {
+			log.Println(err)
+		}
 	}
-	log.Printf("Serving RPC server on port %d\n", 1337)
-	// Start accept incoming HTTP connections
-	err = http.Serve(listener, nil)
+}
+
+func handleClient(conn net.Conn) {
+	r := bufio.NewReader(conn)
+	msg, err := r.ReadString('\n')
 	if err != nil {
-		log.Println("Error serving: ", err)
+		log.Println(err)
+		return
+	}
+	log.Println(msg)
+	var event Event
+	err = json.Unmarshal([]byte(msg), &event)
+	if err != nil {
+		log.Println(err)
+	}
+	log.Println(event)
+	log.Println(event.Action)
+	authed := checkAuth(event)
+	if authed {
+		log.Println("client authenticated")
+		switch event.Action {
+		case "checkin":
+			processCheckin(conn, event)
+		case "register":
+			processRegisterNode(conn, event)
+		}
+	} else {
+		log.Println("client not authed")
+		conn.Close()
+	}
+}
+
+func checkAuth(event Event) bool {
+	redisClient := redis.NewClient(&redis.Options{
+		Addr: "localhost:6379",
+	})
+	result, err := redisClient.Get("auth").Result()
+	if err != nil {
+		log.Println(err)
+	}
+	if result == "" {
+		return false
+	}
+	if event.Auth == result {
+		return true
+	}
+	return false
+}
+
+func checkin(event Event) bool {
+	redisClient := redis.NewClient(&redis.Options{
+		Addr: "localhost:6379",
+	})
+	result, err := redisClient.Get(string(event.Id)).Result()
+	if err != nil {
+		log.Println(err)
+	}
+	if result == "" {
+		log.Printf("node not found: %d", event.Id)
+		return false
+	} else {
+		return true
+	}
+
+}
+
+func processRegisterNode(conn net.Conn, event Event) {
+	log.Println(event)
+	redisClient := redis.NewClient(&redis.Options{
+		Addr: "localhost:6379",
+	})
+	err := redisClient.Set(string(event.Id), 1, 0).Err()
+	if err != nil {
+		log.Println(err)
+	}
+	response := Response{
+		1,
+		0,
+		"registration successful",
+	}
+	marshaled, _ := json.Marshal(response)
+	output := []byte(string(marshaled) + "\n")
+	log.Println(output)
+	conn.Write(output)
+	if err != nil {
+		log.Println(err)
+	}
+
+}
+
+func checkError(err error) {
+	if err != nil {
+		fmt.Println("Fatal error ", err.Error())
+		os.Exit(1)
 	}
 }

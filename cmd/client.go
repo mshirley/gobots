@@ -1,9 +1,12 @@
 package cmd
 
 import (
+	"bufio"
+	"crypto/tls"
+	"encoding/json"
+	"fmt"
 	"github.com/spf13/cobra"
 	"log"
-	"net/rpc"
 	"time"
 )
 
@@ -12,7 +15,10 @@ var clientCmd = &cobra.Command{
 	Short: "start bot client",
 	Long:  "START BOT CLIENT",
 	Run: func(cmd *cobra.Command, args []string) {
-		startClient()
+		for {
+			startClient()
+			time.Sleep(1 * time.Second)
+		}
 	},
 }
 
@@ -20,32 +26,74 @@ func init() {
 	rootCmd.AddCommand(clientCmd)
 }
 
-func getClient() *rpc.Client {
-	log.Println("STARTING BOT CLIENT")
-	serverAddress := "localhost"
-	client, err := rpc.DialHTTP("tcp", serverAddress+":1337")
+func sendAndReceive(event *Event) Response {
+	config := tls.Config{InsecureSkipVerify: true}
+	client, err := tls.Dial("tcp", "localhost:1337", &config)
 	if err != nil {
-		log.Println("dialing:", err)
+		log.Println(err)
 	}
-	return client
 
+	jsonLogin, err := json.Marshal(event)
+	if err != nil {
+		log.Println(err)
+	}
+	log.Println(string(jsonLogin))
+	_, err = client.Write([]byte(string(jsonLogin) + "\n"))
+	if err != nil {
+		log.Println(err)
+	}
+	log.Println("reading from client")
+	r := bufio.NewReader(client)
+	msg, err := r.ReadString('\n')
+	if err != nil {
+		log.Println(err)
+	}
+	log.Println(msg)
+	var response Response
+	err = json.Unmarshal([]byte(msg), &response)
+	if err != nil {
+		log.Println(err)
+	}
+	log.Println(response)
+	return response
 }
 
 func startClient() {
-	client := getClient()
-	args := &Event{
-		"test",
-	}
-	go func() {
-		for {
-			var reply Event
-			err := client.Call("Task.Checkin", args, &reply)
-			if err != nil {
-				log.Println(err)
-			}
-			log.Println(reply.Message)
-			time.Sleep(1 * time.Second)
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println("Recovered", r)
 		}
 	}()
-	select {}
+	login := &Event{
+		2,
+		time.Now(),
+		"checkin",
+		map[string]string{
+			"param1": "none",
+		},
+		"password",
+	}
+	for {
+		response := sendAndReceive(login)
+		if response.ResponseCode == 1 {
+			registration := &Event{
+				2,
+				time.Now(),
+				"register",
+				map[string]string{
+					"name":    "bot01",
+					"details": "my details",
+				},
+				"password",
+			}
+			registerWithServer(registration)
+		}
+		time.Sleep(5 * time.Second)
+	}
+}
+
+func registerWithServer(registration *Event) {
+	response := sendAndReceive(registration)
+	log.Println(response)
+
 }
