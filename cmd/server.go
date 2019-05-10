@@ -67,6 +67,11 @@ type Response struct {
 	ResponseMessage string
 }
 
+type Job struct {
+	Id      int
+	Message string
+}
+
 func processCheckin(conn net.Conn, event Event) {
 	result := checkin(event)
 	log.Println(result)
@@ -123,10 +128,36 @@ func handleClient(conn net.Conn) {
 			processCheckin(conn, event)
 		case "register":
 			processRegisterNode(conn, event)
+		case "getjobs":
+			processGetJobs(conn, event)
 		}
 	} else {
 		log.Println("client not authed")
 		conn.Close()
+	}
+}
+
+func processGetJobs(conn net.Conn, event Event) {
+	log.Println(event)
+	redisClient := redis.NewClient(&redis.Options{
+		Addr: "localhost:6379",
+	})
+	result, err := redisClient.Get(string(event.Id)).Result()
+	if err != nil {
+		log.Println(err)
+	}
+	log.Println(result)
+	response := Response{
+		1,
+		0,
+		"",
+	}
+	marshaled, _ := json.Marshal(response)
+	output := []byte(string(marshaled) + "\n")
+	log.Println(output)
+	conn.Write(output)
+	if err != nil {
+		log.Println(err)
 	}
 }
 
@@ -169,6 +200,7 @@ func processRegisterNode(conn net.Conn, event Event) {
 	redisClient := redis.NewClient(&redis.Options{
 		Addr: "localhost:6379",
 	})
+
 	err := redisClient.Set(string(event.Id), 1, 0).Err()
 	if err != nil {
 		log.Println(err)

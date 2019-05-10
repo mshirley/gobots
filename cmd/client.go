@@ -75,6 +75,7 @@ func startClient() {
 	}
 	for {
 		response := sendAndReceive(login)
+		log.Println(response)
 		if response.ResponseCode == 1 {
 			registration := &Event{
 				2,
@@ -88,8 +89,26 @@ func startClient() {
 			}
 			registerWithServer(registration)
 		}
+		if response.ResponseCode == 0 {
+			jobs := &Event{
+				2,
+				time.Now(),
+				"getjobs",
+				map[string]string{
+					"params": "all",
+				},
+				"password",
+			}
+			jobresult := getJobs(jobs)
+			log.Println(jobresult)
+		}
 		time.Sleep(5 * time.Second)
 	}
+}
+
+func getJobs(event *Event) Response {
+	jobs := sendAndReceive(event)
+	return jobs
 }
 
 func registerWithServer(registration *Event) {
