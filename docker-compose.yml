@@ -1,12 +1,18 @@
 version: '3'
 services:
-  gobots-server:
-    image: "i929jc0/gobots:latest"
+  master:
+    build: .
+    working_dir: "/app/"
     ports:
       - "1337:1337"
     command:
-      "gobots server --cert /app/cert.pem --key /app/key.pem "
-  gobots-client:
-    image: "i929jc0/gobots:latest"
+      "gobots server --redis redis:6379 --cert /app/cert.pem --key /app/key.pem"
+  client:
+    build: .
+    working_dir: "/app/"
     command:
-      "gobots client --master localhost:1337 "
+      "gobots client --master master:1337"
+  redis:
+    image: "redis:latest"
+    ports:
+      - "6379:6379"

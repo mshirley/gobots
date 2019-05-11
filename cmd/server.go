@@ -29,12 +29,14 @@ var Listen string
 var Cert string
 var Key string
 var Expire int
+var Redis string
 
 func init() {
 	rootCmd.AddCommand(serverCmd)
 	serverCmd.Flags().StringVarP(&Listen, "listen", "l", "0.0.0.0:1337", "gobot server listen address and port")
 	serverCmd.Flags().StringVarP(&Cert, "cert", "c", "cert.pem", "tls certificate")
 	serverCmd.Flags().StringVarP(&Key, "key", "k", "key.pem", "tls key")
+	serverCmd.Flags().StringVarP(&Redis, "redis", "r", "localhost:6379", "redis server")
 	serverCmd.Flags().IntVarP(&Expire, "expire", "e", 30, "default redis expiration in seconds, this keeps client list fresh")
 }
 
@@ -143,7 +145,7 @@ func handleClient(conn net.Conn) {
 func processDeleteJob(conn net.Conn, event Event) {
 	id := strconv.Itoa(event.Id)
 	redisClient := redis.NewClient(&redis.Options{
-		Addr: "localhost:6379",
+		Addr: Redis,
 	})
 	defer redisClient.Close()
 	if _, ok := event.Parameters["job"]; ok {
@@ -183,7 +185,7 @@ func processDeleteJob(conn net.Conn, event Event) {
 func processGetJobs(conn net.Conn, event Event) {
 	id := strconv.Itoa(event.Id)
 	redisClient := redis.NewClient(&redis.Options{
-		Addr: "localhost:6379",
+		Addr: Redis,
 	})
 	defer redisClient.Close()
 	result, err := redisClient.HGetAll("jobs:" + string(id)).Result()
@@ -217,7 +219,7 @@ func processGetJobs(conn net.Conn, event Event) {
 
 func checkAuth(event Event) bool {
 	redisClient := redis.NewClient(&redis.Options{
-		Addr: "localhost:6379",
+		Addr: Redis,
 	})
 	defer redisClient.Close()
 	result, err := redisClient.Get("auth").Result()
@@ -236,7 +238,7 @@ func checkAuth(event Event) bool {
 func checkin(event Event) bool {
 	id := strconv.Itoa(event.Id)
 	redisClient := redis.NewClient(&redis.Options{
-		Addr: "localhost:6379",
+		Addr: Redis,
 	})
 	defer redisClient.Close()
 	result, err := redisClient.Get("client:" + string(id)).Result()
@@ -255,7 +257,7 @@ func checkin(event Event) bool {
 func processRegisterNode(conn net.Conn, event Event) {
 	id := strconv.Itoa(event.Id)
 	redisClient := redis.NewClient(&redis.Options{
-		Addr: "localhost:6379",
+		Addr: Redis,
 	})
 	defer redisClient.Close()
 	err := redisClient.HMSet("jobs:"+string(id), map[string]interface{}{
