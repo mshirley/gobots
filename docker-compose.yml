@@ -1,0 +1,12 @@
+version: '3'
+services:
+  gobots-server:
+    image: "i929jc0/gobots:latest"
+    ports:
+      - "1337:1337"
+    command:
+      "gobots server --cert /app/cert.pem --key /app/key.pem "
+  gobots-client:
+    image: "i929jc0/gobots:latest"
+    command:
+      "gobots client --master localhost:1337 "

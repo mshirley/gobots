@@ -47,7 +47,7 @@ type Event struct {
 }
 
 func startServer() {
-	cert, err := tls.LoadX509KeyPair("cert.pem", "key.pem")
+	cert, err := tls.LoadX509KeyPair(Cert, Key)
 	checkError(err)
 	config := tls.Config{Certificates: []tls.Certificate{cert}}
 
@@ -110,6 +110,7 @@ func processCheckin(conn net.Conn, event Event) {
 }
 
 func handleClient(conn net.Conn) {
+	defer conn.Close()
 	r := bufio.NewReader(conn)
 	msg, err := r.ReadString('\n')
 	if err != nil {
@@ -123,7 +124,7 @@ func handleClient(conn net.Conn) {
 	}
 	authed := checkAuth(event)
 	if authed {
-		log.Println("client authenticated")
+		log.Println(event.Action)
 		switch event.Action {
 		case "checkin":
 			processCheckin(conn, event)
@@ -144,6 +145,7 @@ func processDeleteJob(conn net.Conn, event Event) {
 	redisClient := redis.NewClient(&redis.Options{
 		Addr: "localhost:6379",
 	})
+	defer redisClient.Close()
 	if _, ok := event.Parameters["job"]; ok {
 		result, err := redisClient.HDel("jobs:"+string(id), event.Parameters["job"]).Result()
 		if err != nil {
@@ -183,6 +185,7 @@ func processGetJobs(conn net.Conn, event Event) {
 	redisClient := redis.NewClient(&redis.Options{
 		Addr: "localhost:6379",
 	})
+	defer redisClient.Close()
 	result, err := redisClient.HGetAll("jobs:" + string(id)).Result()
 	if err != nil {
 		log.Println(err)
@@ -216,6 +219,7 @@ func checkAuth(event Event) bool {
 	redisClient := redis.NewClient(&redis.Options{
 		Addr: "localhost:6379",
 	})
+	defer redisClient.Close()
 	result, err := redisClient.Get("auth").Result()
 	if err != nil {
 		log.Println(err)
@@ -234,6 +238,7 @@ func checkin(event Event) bool {
 	redisClient := redis.NewClient(&redis.Options{
 		Addr: "localhost:6379",
 	})
+	defer redisClient.Close()
 	result, err := redisClient.Get("client:" + string(id)).Result()
 	if err != nil {
 		log.Println(err)
@@ -252,6 +257,7 @@ func processRegisterNode(conn net.Conn, event Event) {
 	redisClient := redis.NewClient(&redis.Options{
 		Addr: "localhost:6379",
 	})
+	defer redisClient.Close()
 	err := redisClient.HMSet("jobs:"+string(id), map[string]interface{}{
 		"1234": "command",
 		"2345": "command2",
