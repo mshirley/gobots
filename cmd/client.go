@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/spf13/cobra"
 	"log"
+	"math/rand"
 	"time"
 )
 
@@ -22,13 +23,22 @@ var clientCmd = &cobra.Command{
 	},
 }
 
+var Master string
+var ClientID int
+var Random bool
+var Name string
+
 func init() {
 	rootCmd.AddCommand(clientCmd)
+	clientCmd.Flags().StringVarP(&Master, "master", "m", "localhost:1337", "master gobot server")
+	clientCmd.Flags().IntVarP(&ClientID, "id", "i", 2, "client id")
+	clientCmd.Flags().BoolVarP(&Random, "random", "r", true, "create random client id, overrides --id")
+	clientCmd.Flags().StringVarP(&Name, "name", "n", "client", "client name")
 }
 
 func sendAndReceive(event *Event) Response {
 	config := tls.Config{InsecureSkipVerify: true}
-	client, err := tls.Dial("tcp", "localhost:1337", &config)
+	client, err := tls.Dial("tcp", Master, &config)
 	if err != nil {
 		log.Printf("connection error: %s", err)
 	}
@@ -61,13 +71,19 @@ func sendAndReceive(event *Event) Response {
 }
 
 func startClient() {
+	if Random {
+		rand.Seed(time.Now().UnixNano())
+		ClientID = rand.Intn(10000-1) + 1
+		log.Printf("random id generated: %d", ClientID)
+	}
+
 	defer func() {
 		if r := recover(); r != nil {
 			fmt.Println("Recovered", r)
 		}
 	}()
 	login := &Event{
-		2,
+		ClientID,
 		time.Now(),
 		"checkin",
 		map[string]string{
@@ -79,11 +95,11 @@ func startClient() {
 		response := sendAndReceive(login)
 		if response.Id == 1 && response.ResponseCode == 1 {
 			registration := &Event{
-				2,
+				ClientID,
 				time.Now(),
 				"register",
 				map[string]string{
-					"name":    "bot01",
+					"name":    Name,
 					"details": "my details",
 				},
 				"password",
@@ -94,7 +110,7 @@ func startClient() {
 		if response.Id == 1 && response.ResponseCode == 0 {
 			log.Println("getting jobs")
 			jobs := &Event{
-				2,
+				ClientID,
 				time.Now(),
 				"getjobs",
 				map[string]string{
@@ -122,7 +138,7 @@ func deleteJob(jobResponse Response) {
 	log.Printf("deleting job: %s", jobResponse)
 	for i := range jobResponse.ResponseData {
 		job := &Event{
-			2,
+			ClientID,
 			time.Now(),
 			"deletejob",
 			map[string]string{

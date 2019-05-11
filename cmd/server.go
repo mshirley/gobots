@@ -12,6 +12,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"strconv"
 	"time"
 )
 
@@ -24,8 +25,17 @@ var serverCmd = &cobra.Command{
 	},
 }
 
+var Listen string
+var Cert string
+var Key string
+var Expire int
+
 func init() {
 	rootCmd.AddCommand(serverCmd)
+	serverCmd.Flags().StringVarP(&Listen, "listen", "l", "0.0.0.0:1337", "gobot server listen address and port")
+	serverCmd.Flags().StringVarP(&Cert, "cert", "c", "cert.pem", "tls certificate")
+	serverCmd.Flags().StringVarP(&Key, "key", "k", "key.pem", "tls key")
+	serverCmd.Flags().IntVarP(&Expire, "expire", "e", 30, "default redis expiration in seconds, this keeps client list fresh")
 }
 
 type Event struct {
@@ -45,7 +55,7 @@ func startServer() {
 	config.Time = func() time.Time { return now }
 	config.Rand = rand.Reader
 
-	service := "0.0.0.0:1337"
+	service := Listen
 
 	listener, err := tls.Listen("tcp", service, &config)
 	checkError(err)
@@ -130,11 +140,12 @@ func handleClient(conn net.Conn) {
 }
 
 func processDeleteJob(conn net.Conn, event Event) {
+	id := strconv.Itoa(event.Id)
 	redisClient := redis.NewClient(&redis.Options{
 		Addr: "localhost:6379",
 	})
 	if _, ok := event.Parameters["job"]; ok {
-		result, err := redisClient.HDel(string(event.Id)+":jobs", event.Parameters["job"]).Result()
+		result, err := redisClient.HDel("jobs:"+string(id), event.Parameters["job"]).Result()
 		if err != nil {
 			log.Println(err)
 		}
@@ -168,10 +179,11 @@ func processDeleteJob(conn net.Conn, event Event) {
 }
 
 func processGetJobs(conn net.Conn, event Event) {
+	id := strconv.Itoa(event.Id)
 	redisClient := redis.NewClient(&redis.Options{
 		Addr: "localhost:6379",
 	})
-	result, err := redisClient.HGetAll(string(event.Id) + ":jobs").Result()
+	result, err := redisClient.HGetAll("jobs:" + string(id)).Result()
 	if err != nil {
 		log.Println(err)
 	}
@@ -218,10 +230,11 @@ func checkAuth(event Event) bool {
 }
 
 func checkin(event Event) bool {
+	id := strconv.Itoa(event.Id)
 	redisClient := redis.NewClient(&redis.Options{
 		Addr: "localhost:6379",
 	})
-	result, err := redisClient.Get(string(event.Id)).Result()
+	result, err := redisClient.Get("client:" + string(id)).Result()
 	if err != nil {
 		log.Println(err)
 	}
@@ -235,10 +248,11 @@ func checkin(event Event) bool {
 }
 
 func processRegisterNode(conn net.Conn, event Event) {
+	id := strconv.Itoa(event.Id)
 	redisClient := redis.NewClient(&redis.Options{
 		Addr: "localhost:6379",
 	})
-	err := redisClient.HMSet(string(event.Id)+":jobs", map[string]interface{}{
+	err := redisClient.HMSet("jobs:"+string(id), map[string]interface{}{
 		"1234": "command",
 		"2345": "command2",
 		"3456": "command3",
@@ -246,7 +260,8 @@ func processRegisterNode(conn net.Conn, event Event) {
 	if err != nil {
 		log.Println(err)
 	}
-	err = redisClient.Set(string(event.Id), 1, 0).Err()
+	expire := time.Duration(Expire) * time.Second
+	err = redisClient.Set("client:"+string(id), 1, expire).Err()
 	if err != nil {
 		log.Println(err)
 	}

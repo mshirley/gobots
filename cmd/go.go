@@ -11,7 +11,10 @@ var rootCmd = &cobra.Command{
 	Short: "IT'S GOBOTS",
 	Long:  "IT'S GOBOTS, IT'S GOBOTS",
 	Run: func(cmd *cobra.Command, args []string) {
-		startServer()
+		if len(args) == 0 {
+			cmd.Help()
+			os.Exit(0)
+		}
 	},
 }
 

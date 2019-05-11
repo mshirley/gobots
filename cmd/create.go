@@ -15,7 +15,7 @@ var createCmd = &cobra.Command{
 }
 
 func init() {
-	rootCmd.AddCommand(clientCmd)
+	rootCmd.AddCommand(createCmd)
 }
 
 func createClient() {
