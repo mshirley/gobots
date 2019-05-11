@@ -28,11 +28,13 @@ var ClientID int
 var Random bool
 var Name string
 var Password string
+var Wait int
 
 func init() {
 	rootCmd.AddCommand(clientCmd)
 	clientCmd.Flags().StringVarP(&Master, "master", "m", "localhost:1337", "master gobot server")
 	clientCmd.Flags().IntVarP(&ClientID, "id", "i", 2, "client id")
+	clientCmd.Flags().IntVarP(&Wait, "wait", "w", 300, "check-in time in seconds")
 	clientCmd.Flags().BoolVarP(&Random, "random", "r", true, "create random client id, overrides --id")
 	clientCmd.Flags().StringVarP(&Name, "name", "n", "client", "client name")
 	clientCmd.Flags().StringVarP(&Password, "password", "p", "password", "shared password to authenticate to master")
@@ -125,7 +127,8 @@ func startClient() {
 				processJobs(jobresult)
 			}
 		}
-		time.Sleep(5 * time.Second)
+		wait := time.Duration(Wait) * time.Second
+		time.Sleep(wait * time.Second)
 	}
 }
 

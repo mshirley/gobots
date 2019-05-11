@@ -98,7 +98,6 @@ func processCheckin(conn net.Conn, event Event) {
 		}
 		marshaled, _ := json.Marshal(response)
 		output := []byte(string(marshaled) + "\n")
-		log.Println(string(output))
 		_, err := conn.Write(output)
 		if err != nil {
 			log.Println(err)
@@ -133,6 +132,7 @@ func handleClient(conn net.Conn) {
 	if err != nil {
 		log.Println(err)
 	}
+	log.Println(event)
 	authed := checkAuth(event)
 	if authed {
 		log.Println(event.Action)
@@ -201,8 +201,6 @@ func processGetJobs(conn net.Conn, event Event) {
 	if err != nil {
 		log.Println(err)
 	}
-	log.Printf("redis hgetall result: %s", result)
-	log.Printf("length of result %d", len(result))
 	if len(result) == 0 {
 		response := Response{
 			1,
