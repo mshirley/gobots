@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"github.com/go-redis/redis"
 	_ "github.com/google/uuid"
+	"github.com/sethvargo/go-password/password"
 	"github.com/spf13/cobra"
 	"log"
 	"net"
@@ -52,6 +53,14 @@ func startServer() {
 	cert, err := tls.LoadX509KeyPair(Cert, Key)
 	checkError(err)
 	config := tls.Config{Certificates: []tls.Certificate{cert}}
+
+	pass, _ := password.Generate(64, 10, 10, false, false)
+	redisClient := redis.NewClient(&redis.Options{
+		Addr: Redis,
+	})
+	defer redisClient.Close()
+	redisClient.Set("auth", pass, 0)
+	log.Printf("password set in redis: %s", pass)
 
 	now := time.Now()
 	config.Time = func() time.Time { return now }
