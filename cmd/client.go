@@ -27,6 +27,7 @@ var Master string
 var ClientID int
 var Random bool
 var Name string
+var Password string
 
 func init() {
 	rootCmd.AddCommand(clientCmd)
@@ -34,6 +35,7 @@ func init() {
 	clientCmd.Flags().IntVarP(&ClientID, "id", "i", 2, "client id")
 	clientCmd.Flags().BoolVarP(&Random, "random", "r", true, "create random client id, overrides --id")
 	clientCmd.Flags().StringVarP(&Name, "name", "n", "client", "client name")
+	clientCmd.Flags().StringVarP(&Password, "password", "p", "password", "shared password to authenticate to master")
 }
 
 func sendAndReceive(event *Event) Response {
@@ -89,7 +91,7 @@ func startClient() {
 		map[string]string{
 			"param1": "none",
 		},
-		"password",
+		Password,
 	}
 	for {
 		response := sendAndReceive(login)
@@ -102,7 +104,7 @@ func startClient() {
 					"name":    Name,
 					"details": "my details",
 				},
-				"password",
+				Password,
 			}
 			log.Println("registering with server")
 			registerWithServer(registration)
@@ -116,7 +118,7 @@ func startClient() {
 				map[string]string{
 					"params": "all",
 				},
-				"password",
+				Password,
 			}
 			jobresult := getJobs(jobs)
 			if len(jobresult.ResponseData) > 0 {
@@ -144,7 +146,7 @@ func deleteJob(jobResponse Response) {
 			map[string]string{
 				"job": string(i),
 			},
-			"password",
+			Password,
 		}
 		result := sendAndReceive(job)
 		log.Printf("delete job result: %s", result)
