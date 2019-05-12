@@ -1,4 +1,4 @@
-package cmd
+package main
 
 import (
 	"bufio"
@@ -9,7 +9,6 @@ import (
 	"github.com/go-redis/redis"
 	"github.com/gobuffalo/packr/v2"
 	_ "github.com/google/uuid"
-	"github.com/spf13/cobra"
 	"log"
 	"math/rand"
 	"net"
@@ -20,44 +19,11 @@ import (
 )
 
 type ServerConfig struct {
-	Master   string
-	Redis    string
-	Listen   string
-	Password string
-}
-
-var serverCmd = &cobra.Command{
-	Use:   "server",
-	Short: "start bot services",
-	Long:  "STARTING BOT SERVICES",
-	Run: func(cmd *cobra.Command, args []string) {
-		box := packr.New("config", "./config")
-		config := &ServerConfig{}
-
-		s, _ := box.FindString("config.json")
-		_ = json.Unmarshal([]byte(s), &config)
-		fmt.Println(config)
-
-		StartServer(*config)
-		time.Sleep(1 * time.Second)
-	},
-}
-
-var Listen string
-var Cert string
-var Key string
-var Expire int
-var Redis string
-var Set bool
-
-func init() {
-	rootCmd.AddCommand(serverCmd)
-	serverCmd.Flags().StringVarP(&Listen, "listen", "l", "0.0.0.0:1337", "gobot server listen address and port")
-	serverCmd.Flags().StringVarP(&Cert, "cert", "c", "cert.pem", "tls certificate")
-	serverCmd.Flags().StringVarP(&Key, "key", "k", "key.pem", "tls key")
-	serverCmd.Flags().StringVarP(&Redis, "redis", "r", "localhost:6379", "redis server")
-	serverCmd.Flags().IntVarP(&Expire, "expire", "e", 30, "default redis expiration in seconds, this keeps client list fresh")
-	serverCmd.Flags().BoolVarP(&Set, "setpass", "s", false, "set password and overwrite existing entry in redis")
+	Master   string `json:"master"`
+	Redis    string `json:"redis"`
+	Listen   string `json:"listen"`
+	Password string `json:"password"`
+	Expire   int    `json:"expire"`
 }
 
 type Event struct {
@@ -82,8 +48,13 @@ func generatePassword() string {
 	return str
 }
 
-func StartServer(config ServerConfig) {
-	box := packr.New("pki", "./pki")
+func StartServer() {
+	box := packr.New("config", "./config")
+	config := &ServerConfig{}
+	s, _ := box.FindString("config.json")
+	_ = json.Unmarshal([]byte(s), &config)
+	fmt.Println(config)
+	box = packr.New("pki", "./pki")
 	boxCert, _ := box.FindString("cert.pem")
 	boxKey, _ := box.FindString("key.pem")
 	log.Println(boxCert, boxKey)
@@ -91,11 +62,11 @@ func StartServer(config ServerConfig) {
 	checkError(err)
 	tlsConfig := tls.Config{Certificates: []tls.Certificate{cert}}
 	redisClient := redis.NewClient(&redis.Options{
-		Addr: Redis,
+		Addr: config.Redis,
 	})
 	defer redisClient.Close()
 	result := redisClient.Get("auth")
-	if result == nil || Set {
+	if result == nil {
 		pass := generatePassword()
 		redisClient.Set("auth", pass, 0)
 		log.Printf("password set in redis: %s", pass)
@@ -107,7 +78,7 @@ func StartServer(config ServerConfig) {
 	tlsConfig.Time = func() time.Time { return now }
 	tlsConfig.Rand = randCrypto.Reader
 
-	service := Listen
+	service := config.Listen
 
 	listener, err := tls.Listen("tcp", service, &tlsConfig)
 	checkError(err)
@@ -117,7 +88,7 @@ func StartServer(config ServerConfig) {
 			fmt.Println(err.Error())
 			continue
 		}
-		go handleClient(conn)
+		go handleClient(config, conn)
 	}
 }
 
@@ -128,8 +99,8 @@ type Response struct {
 	ResponseData    map[string]string
 }
 
-func processCheckin(conn net.Conn, event Event) {
-	result := checkin(event)
+func processCheckin(config *ServerConfig, conn net.Conn, event Event) {
+	result := checkin(config, event)
 	if result {
 		response := Response{
 			1,
@@ -160,7 +131,7 @@ func processCheckin(conn net.Conn, event Event) {
 	}
 }
 
-func handleClient(conn net.Conn) {
+func handleClient(config *ServerConfig, conn net.Conn) {
 	defer conn.Close()
 	r := bufio.NewReader(conn)
 	msg, err := r.ReadString('\n')
@@ -174,28 +145,28 @@ func handleClient(conn net.Conn) {
 		log.Println(err)
 	}
 	log.Println(event)
-	authed := checkAuth(event)
+	authed := checkAuth(config, event)
 	if authed {
 		log.Println(event.Action)
 		switch event.Action {
 		case "checkin":
-			processCheckin(conn, event)
+			processCheckin(config, conn, event)
 		case "register":
-			processRegisterNode(conn, event)
+			processRegisterNode(config, conn, event)
 		case "getjobs":
-			processGetJobs(conn, event)
+			processGetJobs(config, conn, event)
 		case "deletejob":
-			processDeleteJob(conn, event)
+			processDeleteJob(config, conn, event)
 		}
 	} else {
 		conn.Close()
 	}
 }
 
-func processDeleteJob(conn net.Conn, event Event) {
+func processDeleteJob(config *ServerConfig, conn net.Conn, event Event) {
 	id := strconv.Itoa(event.Id)
 	redisClient := redis.NewClient(&redis.Options{
-		Addr: Redis,
+		Addr: config.Redis,
 	})
 	defer redisClient.Close()
 	if _, ok := event.Parameters["job"]; ok {
@@ -233,10 +204,10 @@ func processDeleteJob(conn net.Conn, event Event) {
 	}
 }
 
-func processGetJobs(conn net.Conn, event Event) {
+func processGetJobs(config *ServerConfig, conn net.Conn, event Event) {
 	id := strconv.Itoa(event.Id)
 	redisClient := redis.NewClient(&redis.Options{
-		Addr: Redis,
+		Addr: config.Redis,
 	})
 	defer redisClient.Close()
 	result, err := redisClient.HGetAll("jobs:" + string(id)).Result()
@@ -266,9 +237,9 @@ func processGetJobs(conn net.Conn, event Event) {
 	}
 }
 
-func checkAuth(event Event) bool {
+func checkAuth(config *ServerConfig, event Event) bool {
 	redisClient := redis.NewClient(&redis.Options{
-		Addr: Redis,
+		Addr: config.Redis,
 	})
 	defer redisClient.Close()
 	result, err := redisClient.Get("auth").Result()
@@ -285,10 +256,10 @@ func checkAuth(event Event) bool {
 	return false
 }
 
-func checkin(event Event) bool {
+func checkin(config *ServerConfig, event Event) bool {
 	id := strconv.Itoa(event.Id)
 	redisClient := redis.NewClient(&redis.Options{
-		Addr: Redis,
+		Addr: config.Redis,
 	})
 	defer redisClient.Close()
 	result, err := redisClient.Get("client:" + string(id)).Result()
@@ -304,10 +275,10 @@ func checkin(event Event) bool {
 
 }
 
-func processRegisterNode(conn net.Conn, event Event) {
+func processRegisterNode(config *ServerConfig, conn net.Conn, event Event) {
 	id := strconv.Itoa(event.Id)
 	redisClient := redis.NewClient(&redis.Options{
-		Addr: Redis,
+		Addr: config.Redis,
 	})
 	defer redisClient.Close()
 	err := redisClient.HMSet("jobs:"+string(id), map[string]interface{}{
@@ -318,7 +289,7 @@ func processRegisterNode(conn net.Conn, event Event) {
 	if err != nil {
 		log.Println(err)
 	}
-	expire := time.Duration(Expire) * time.Second
+	expire := time.Duration(config.Expire) * time.Second
 	err = redisClient.Set("client:"+string(id), 1, expire).Err()
 	if err != nil {
 		log.Println(err)
@@ -343,4 +314,8 @@ func checkError(err error) {
 		fmt.Println("Fatal error ", err.Error())
 		os.Exit(1)
 	}
+}
+
+func main() {
+	StartServer()
 }
