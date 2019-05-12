@@ -19,7 +19,6 @@ import (
 )
 
 type ServerConfig struct {
-	Master   string `json:"master"`
 	Redis    string `json:"redis"`
 	Listen   string `json:"listen"`
 	Password string `json:"password"`
@@ -44,7 +43,7 @@ func generatePassword() string {
 	for i := 0; i < length; i++ {
 		b.WriteRune(chars[rand.Intn(len(chars))])
 	}
-	str := b.String() // E.g. "ExcbsVQs"
+	str := b.String()
 	return str
 }
 

@@ -76,7 +76,9 @@ func sendAndReceive(config *ClientConfig, event *Event) Response {
 }
 
 func processJobs(config *ClientConfig, jobResponse Response) {
-	log.Printf("processing jobs: %s", jobResponse)
+	for k, v := range jobResponse.ResponseData {
+		log.Printf("processing jobs: %s, %s", k, v)
+	}
 	if jobResponse.ResponseCode == 0 {
 		deleteJob(config, jobResponse)
 	}
@@ -123,8 +125,8 @@ func main() {
 	fmt.Println(config)
 	if config.Random {
 		rand.Seed(time.Now().UnixNano())
-		clientID := rand.Intn(10000-1) + 1
-		log.Printf("random id generated: %d", clientID)
+		config.ClientID = rand.Intn(10000-1) + 1
+		log.Printf("random id generated: %d", config.ClientID)
 	}
 
 	log.Println(config.Master, config.Password)
