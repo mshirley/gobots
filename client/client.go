@@ -12,12 +12,12 @@ import (
 )
 
 type ClientConfig struct {
-	Master   string
-	Password string
-	Random   bool
-	ClientID int
-	Name     string
-	Wait     int
+	Master   string `json:"master"`
+	Password string `json:"password"`
+	Random   bool   `json:"random"`
+	ClientID int    `json:"clientid"`
+	Name     string `json:"name"`
+	Wait     int    `json:"wait"`
 }
 
 type Event struct {
@@ -36,6 +36,11 @@ type Response struct {
 }
 
 func sendAndReceive(config *ClientConfig, event *Event) Response {
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println("Recovered", r)
+		}
+	}()
 	tlsConfig := tls.Config{InsecureSkipVerify: true}
 	client, err := tls.Dial("tcp", config.Master, &tlsConfig)
 	if err != nil {
@@ -96,13 +101,11 @@ func deleteJob(config *ClientConfig, jobResponse Response) {
 }
 
 func getJobs(config *ClientConfig, event *Event) Response {
-	jobs := sendAndReceive(config, event)
-	return jobs
+	return sendAndReceive(config, event)
 }
 
 func registerWithServer(config *ClientConfig, registration *Event) Response {
-	response := sendAndReceive(config, registration)
-	return response
+	return sendAndReceive(config, registration)
 }
 
 func main() {
@@ -126,11 +129,6 @@ func main() {
 
 	log.Println(config.Master, config.Password)
 
-	defer func() {
-		if r := recover(); r != nil {
-			fmt.Println("Recovered", r)
-		}
-	}()
 	login := &Event{
 		config.ClientID,
 		time.Now(),
@@ -158,7 +156,6 @@ func main() {
 			response = registerWithServer(config, registration)
 			log.Println("registration complete")
 		}
-		log.Println(response.Id, response.ResponseCode)
 		if response.Id == 1 && response.ResponseCode == 0 {
 			log.Println("getting jobs")
 			jobs := &Event{
