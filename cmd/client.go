@@ -5,11 +5,17 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"github.com/gobuffalo/packr/v2"
 	"github.com/spf13/cobra"
 	"log"
 	"math/rand"
 	"time"
 )
+
+type ClientConfig struct {
+	Master   string
+	Password string
+}
 
 var clientCmd = &cobra.Command{
 	Use:   "client",
@@ -17,8 +23,19 @@ var clientCmd = &cobra.Command{
 	Long:  "START BOT CLIENT",
 	Run: func(cmd *cobra.Command, args []string) {
 		for {
-			startClient()
-			time.Sleep(1 * time.Second)
+			box := packr.New("config", "./config")
+			config := &ClientConfig{}
+
+			s, err := box.FindString("config.json")
+			if err != nil {
+				log.Println(err)
+			}
+			err = json.Unmarshal([]byte(s), &config)
+			if err != nil {
+				log.Println(err)
+			}
+			fmt.Println(config)
+			StartClient(*config)
 		}
 	},
 }
@@ -34,7 +51,7 @@ func init() {
 	rootCmd.AddCommand(clientCmd)
 	clientCmd.Flags().StringVarP(&Master, "master", "m", "localhost:1337", "master gobot server")
 	clientCmd.Flags().IntVarP(&ClientID, "id", "i", 2, "client id")
-	clientCmd.Flags().IntVarP(&Wait, "wait", "w", 300, "check-in time in seconds")
+	clientCmd.Flags().IntVarP(&Wait, "wait", "w", 5, "check-in time in seconds")
 	clientCmd.Flags().BoolVarP(&Random, "random", "r", true, "create random client id, overrides --id")
 	clientCmd.Flags().StringVarP(&Name, "name", "n", "client", "client name")
 	clientCmd.Flags().StringVarP(&Password, "password", "p", "password", "shared password to authenticate to master")
@@ -71,15 +88,25 @@ func sendAndReceive(event *Event) Response {
 	if err != nil {
 		log.Printf("response unmarshal error: %s", err)
 	}
+	log.Println(response)
 	return response
 }
 
-func startClient() {
+func StartClient(config ClientConfig) {
+	if config.Master != "" {
+		Master = config.Master
+	}
+	if config.Password != "" {
+		Password = config.Password
+	}
+
 	if Random {
 		rand.Seed(time.Now().UnixNano())
 		ClientID = rand.Intn(10000-1) + 1
 		log.Printf("random id generated: %d", ClientID)
 	}
+
+	log.Println(Master, Password)
 
 	defer func() {
 		if r := recover(); r != nil {
@@ -97,6 +124,7 @@ func startClient() {
 	}
 	for {
 		response := sendAndReceive(login)
+		log.Println(response)
 		if response.Id == 1 && response.ResponseCode == 1 {
 			registration := &Event{
 				ClientID,
@@ -109,8 +137,10 @@ func startClient() {
 				Password,
 			}
 			log.Println("registering with server")
-			registerWithServer(registration)
+			response = registerWithServer(registration)
+			log.Println("registration complete")
 		}
+		log.Println(response.Id, response.ResponseCode)
 		if response.Id == 1 && response.ResponseCode == 0 {
 			log.Println("getting jobs")
 			jobs := &Event{
@@ -128,7 +158,8 @@ func startClient() {
 			}
 		}
 		wait := time.Duration(Wait) * time.Second
-		time.Sleep(wait * time.Second)
+		time.Sleep(wait)
+		log.Println("ended sleep")
 	}
 }
 
@@ -162,6 +193,7 @@ func getJobs(event *Event) Response {
 	return jobs
 }
 
-func registerWithServer(registration *Event) {
-	_ = sendAndReceive(registration)
+func registerWithServer(registration *Event) Response {
+	response := sendAndReceive(registration)
+	return response
 }
