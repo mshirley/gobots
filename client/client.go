@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"github.com/gobuffalo/packd"
 	"github.com/gobuffalo/packr/v2"
 	"log"
 	"math/rand"
@@ -108,29 +109,29 @@ func getJobs(config *ClientConfig, event *Event) Response {
 
 func registerWithServer(config *ClientConfig, registration *Event) Response {
 	return sendAndReceive(config, registration)
+
 }
 
-func main() {
+func getConfig() (packd.Box, *ClientConfig) {
 	box := packr.New("config", "./config")
 	config := &ClientConfig{}
-
 	s, err := box.FindString("config.json")
-	if err != nil {
-		log.Println(err)
-	}
 	err = json.Unmarshal([]byte(s), &config)
 	if err != nil {
 		log.Println(err)
 	}
 	fmt.Println(config)
+	return box, config
+}
+
+func main() {
+	_, config := getConfig()
 	if config.Random {
 		rand.Seed(time.Now().UnixNano())
 		config.ClientID = rand.Intn(10000-1) + 1
 		log.Printf("random id generated: %d", config.ClientID)
 	}
-
 	log.Println(config.Master, config.Password)
-
 	login := &Event{
 		config.ClientID,
 		time.Now(),
