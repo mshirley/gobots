@@ -143,10 +143,10 @@ func handleClient(config *ServerConfig, conn net.Conn) {
 	if err != nil {
 		log.Println(err)
 	}
-	log.Println(event)
+	//log.Println(event)
 	authed := checkAuth(config, event)
 	if authed {
-		log.Println(event.Action)
+		log.Println(event.Action, event.Id, event.Parameters)
 		switch event.Action {
 		case "checkin":
 			processCheckin(config, conn, event)
@@ -156,10 +156,17 @@ func handleClient(config *ServerConfig, conn net.Conn) {
 			processGetJobs(config, conn, event)
 		case "deletejob":
 			processDeleteJob(config, conn, event)
+		case "jobresult":
+			processJobResult(config, conn, event)
 		}
 	} else {
 		conn.Close()
 	}
+}
+
+func processJobResult(config *ServerConfig, conn net.Conn, event Event) {
+	defer conn.Close()
+	log.Println(event)
 }
 
 func processDeleteJob(config *ServerConfig, conn net.Conn, event Event) {
@@ -169,7 +176,6 @@ func processDeleteJob(config *ServerConfig, conn net.Conn, event Event) {
 	})
 	defer redisClient.Close()
 	if _, ok := event.Parameters["job"]; ok {
-		log.Println("getting jobs")
 		result, err := redisClient.HDel("jobs:"+string(id), event.Parameters["job"]).Result()
 		if err != nil {
 			log.Println(err)
@@ -248,7 +254,7 @@ func checkAuth(config *ServerConfig, event Event) bool {
 	if result == "" {
 		return false
 	}
-	log.Println(event.Auth, result)
+	//log.Println(event.Auth, result)
 	if event.Auth == result {
 		return true
 	}

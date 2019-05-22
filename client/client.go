@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"crypto/tls"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"github.com/gobuffalo/packd"
@@ -88,7 +89,18 @@ func processJobs(config *ClientConfig, jobResponse Response) {
 		if err != nil {
 			fmt.Println(err)
 		}
-		fmt.Println(out.String())
+		jobResult := &Event{
+			config.ClientID,
+			time.Now(),
+			"jobresult",
+			map[string]string{
+				"job":  string(k),
+				"data": base64.StdEncoding.EncodeToString([]byte(out.String())),
+			},
+			config.Password,
+		}
+		fmt.Println(jobResult)
+		sendAndReceive(config, jobResult)
 	}
 	if jobResponse.ResponseCode == 0 {
 		deleteJob(config, jobResponse)
