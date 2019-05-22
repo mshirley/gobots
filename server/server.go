@@ -281,9 +281,10 @@ func processRegisterNode(config *ServerConfig, conn net.Conn, event Event) {
 	})
 	defer redisClient.Close()
 	err := redisClient.HMSet("jobs:"+string(id), map[string]interface{}{
-		"1234": "command",
-		"2345": "command2",
-		"3456": "command3",
+		"1234": "whoami",
+		"2345": "ls /",
+		"3456": "df",
+		"4567": "cat /proc/cpuinfo",
 	}).Err()
 	if err != nil {
 		log.Println(err)

