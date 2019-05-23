@@ -167,6 +167,17 @@ func handleClient(config *ServerConfig, conn net.Conn) {
 func processJobResult(config *ServerConfig, conn net.Conn, event Event) {
 	defer conn.Close()
 	log.Println(event)
+	response := Response{
+		1,
+		0,
+		"job result received",
+		map[string]string{
+			"job": event.Parameters["job"],
+		},
+	}
+	marshaled, _ := json.Marshal(response)
+	output := []byte(string(marshaled) + "\n")
+	_, _ = conn.Write(output)
 }
 
 func processDeleteJob(config *ServerConfig, conn net.Conn, event Event) {

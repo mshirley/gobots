@@ -47,6 +47,7 @@ func sendAndReceive(config *ClientConfig, event *Event) Response {
 	}()
 	tlsConfig := tls.Config{InsecureSkipVerify: true}
 	client, err := tls.Dial("tcp", config.Master, &tlsConfig)
+	defer client.Close()
 	if err != nil {
 		log.Printf("connection error: %s", err)
 	}
@@ -99,7 +100,7 @@ func processJobs(config *ClientConfig, jobResponse Response) {
 			},
 			config.Password,
 		}
-		fmt.Println(jobResult)
+		log.Println(jobResult)
 		sendAndReceive(config, jobResult)
 	}
 	if jobResponse.ResponseCode == 0 {
