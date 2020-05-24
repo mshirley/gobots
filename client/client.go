@@ -188,7 +188,7 @@ func main() {
 	log.Println("getting system information")
 	info, err := sysinfo.Host()
 	if err != nil {
-		log.Println("unable to get system information, #{err}")
+		log.Printf("unable to get system information, #{err}")
 	}
 	log.Println(info)
 	infoJson, _ := json.Marshal(info.Info())
