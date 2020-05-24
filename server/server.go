@@ -19,9 +19,9 @@ import (
 )
 
 type ServerConfig struct {
-	Redis    string `json:"redis"`
-	Listen   string `json:"listen"`
-	Expire   int    `json:"expire"`
+	Redis  string `json:"redis"`
+	Listen string `json:"listen"`
+	Expire int    `json:"expire"`
 }
 
 type Event struct {
@@ -63,10 +63,10 @@ func StartServer() {
 		Addr: config.Redis,
 	})
 	defer redisClient.Close()
-	result, err := redisClient.Get("auth").Result()
+	result, err := redisClient.Get(redisClient.Context(), "auth").Result()
 	if err == redis.Nil {
 		pass := generatePassword()
-		redisClient.Set("auth", pass, 0)
+		redisClient.Set(redisClient.Context(), "auth", pass, 0)
 		log.Printf("password set in redis: %s", pass)
 	} else {
 		log.Printf("using existing password in redis: %s", result)
@@ -186,7 +186,7 @@ func processDeleteJob(config *ServerConfig, conn net.Conn, event Event) {
 	})
 	defer redisClient.Close()
 	if _, ok := event.Parameters["job"]; ok {
-		result, err := redisClient.HDel("jobs:"+string(id), event.Parameters["job"]).Result()
+		result, err := redisClient.HDel(redisClient.Context(), "jobs:"+id, event.Parameters["job"]).Result()
 		if err != nil {
 			log.Println(err)
 		}
@@ -225,7 +225,7 @@ func processGetJobs(config *ServerConfig, conn net.Conn, event Event) {
 		Addr: config.Redis,
 	})
 	defer redisClient.Close()
-	result, err := redisClient.HGetAll("jobs:" + string(id)).Result()
+	result, err := redisClient.HGetAll(redisClient.Context(), "jobs:"+string(id)).Result()
 	if err != nil {
 		log.Println(err)
 	}
@@ -257,7 +257,7 @@ func checkAuth(config *ServerConfig, event Event) bool {
 		Addr: config.Redis,
 	})
 	defer redisClient.Close()
-	result, err := redisClient.Get("auth").Result()
+	result, err := redisClient.Get(redisClient.Context(), "auth").Result()
 	if err != nil {
 		log.Println(err)
 	}
@@ -277,7 +277,7 @@ func checkin(config *ServerConfig, event Event) bool {
 		Addr: config.Redis,
 	})
 	defer redisClient.Close()
-	result, err := redisClient.Get("client:" + string(id)).Result()
+	result, err := redisClient.Get(redisClient.Context(), "client:"+string(id)).Result()
 	if err != nil {
 		log.Println(err)
 	}
@@ -296,7 +296,7 @@ func processRegisterNode(config *ServerConfig, conn net.Conn, event Event) {
 		Addr: config.Redis,
 	})
 	defer redisClient.Close()
-	err := redisClient.HMSet("jobs:"+id, map[string]interface{}{
+	err := redisClient.HMSet(redisClient.Context(), "jobs:"+id, map[string]interface{}{
 		"1234": "whoami",
 		"2345": "ls /",
 		"3456": "df",
@@ -306,7 +306,7 @@ func processRegisterNode(config *ServerConfig, conn net.Conn, event Event) {
 		log.Println(err)
 	}
 	expire := time.Duration(config.Expire) * time.Second
-	err = redisClient.Set("client:"+string(id), 1, expire).Err()
+	err = redisClient.Set(redisClient.Context(), "client:"+string(id), 1, expire).Err()
 	if err != nil {
 		log.Println(err)
 	}
