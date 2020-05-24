@@ -131,6 +131,7 @@ func processCheckin(config *ServerConfig, conn net.Conn, event Event) {
 
 func handleClient(config *ServerConfig, conn net.Conn) {
 	defer conn.Close()
+	log.Println("connection info:", conn.LocalAddr(), conn.RemoteAddr())
 	r := bufio.NewReader(conn)
 	msg, err := r.ReadString('\n')
 	if err != nil {
@@ -142,7 +143,7 @@ func handleClient(config *ServerConfig, conn net.Conn) {
 	if err != nil {
 		log.Println(err)
 	}
-	//log.Println(event)
+	log.Println(event)
 	authed := checkAuth(config, event)
 	if authed {
 		log.Println(event.Action, event.Id, event.Parameters)
@@ -264,7 +265,7 @@ func checkAuth(config *ServerConfig, event Event) bool {
 	if result == "" {
 		return false
 	}
-	//log.Println(event.Auth, result)
+	log.Println(event.Auth, result)
 	if event.Auth == result {
 		return true
 	}
