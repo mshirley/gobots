@@ -21,7 +21,6 @@ import (
 type ServerConfig struct {
 	Redis    string `json:"redis"`
 	Listen   string `json:"listen"`
-	Password string `json:"password"`
 	Expire   int    `json:"expire"`
 }
 
@@ -64,8 +63,8 @@ func StartServer() {
 		Addr: config.Redis,
 	})
 	defer redisClient.Close()
-	result := redisClient.Get("auth")
-	if result == nil {
+	result, err := redisClient.Get("auth").Result()
+	if err == redis.Nil {
 		pass := generatePassword()
 		redisClient.Set("auth", pass, 0)
 		log.Printf("password set in redis: %s", pass)
@@ -297,7 +296,7 @@ func processRegisterNode(config *ServerConfig, conn net.Conn, event Event) {
 		Addr: config.Redis,
 	})
 	defer redisClient.Close()
-	err := redisClient.HMSet("jobs:"+string(id), map[string]interface{}{
+	err := redisClient.HMSet("jobs:"+id, map[string]interface{}{
 		"1234": "whoami",
 		"2345": "ls /",
 		"3456": "df",
