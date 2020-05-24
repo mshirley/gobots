@@ -36,7 +36,9 @@ type Response struct {
 	ResponseData    map[string]string
 }
 
+// SendAndReceive is the function used to send data to the server and receive a result
 func sendAndReceive(config *ClientConfig, event *Event) Response {
+	// this function catches panics that occur when we tls.Dial such as connection errors
 	defer func() {
 		if r := recover(); r != nil {
 			fmt.Println("Recovered", r)
@@ -76,6 +78,8 @@ func sendAndReceive(config *ClientConfig, event *Event) Response {
 	return response
 }
 
+
+// ProcessJobs takes an incoming job response from the server and executes them
 func processJobs(config *ClientConfig, jobResponse Response) {
 	for k, v := range jobResponse.ResponseData {
 		log.Printf("processing jobs: %s, %s", k, v)
@@ -85,6 +89,7 @@ func processJobs(config *ClientConfig, jobResponse Response) {
 	}
 }
 
+// DeleteJob simply sends a deletejob request to the server once a job has been processed
 func deleteJob(config *ClientConfig, jobResponse Response) {
 	log.Printf("deleting job: %s", jobResponse)
 	for i := range jobResponse.ResponseData {
@@ -103,15 +108,18 @@ func deleteJob(config *ClientConfig, jobResponse Response) {
 	}
 }
 
+// GetJobs sends a job event to the sendAndReceive function
 func getJobs(config *ClientConfig, event *Event) Response {
 	return sendAndReceive(config, event)
 }
 
+// RegisterWithServer sends a register event to the sendAndReceive function
 func registerWithServer(config *ClientConfig, registration *Event) Response {
 	return sendAndReceive(config, registration)
 
 }
 
+// GetConfig reads config files from a packr box
 func getConfig() (packd.Box, *ClientConfig) {
 	box := packr.New("config", "./config")
 	config := &ClientConfig{}
@@ -124,6 +132,7 @@ func getConfig() (packd.Box, *ClientConfig) {
 	return box, config
 }
 
+// main function generates a random clientid if set in config, executes the main loop to register with the server, and pulls jobs
 func main() {
 	_, config := getConfig()
 	if config.Random {
