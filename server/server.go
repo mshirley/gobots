@@ -32,6 +32,34 @@ type Event struct {
 	Auth       string
 }
 
+// HostInfo contains basic host information.
+type HostInfo struct {
+	Architecture      string    `json:"architecture"`            // Hardware architecture (e.g. x86_64, arm, ppc, mips).
+	BootTime          time.Time `json:"boot_time"`               // Host boot time.
+	Containerized     *bool     `json:"containerized,omitempty"` // Is the process containerized.
+	Hostname          string    `json:"name"`                    // Hostname
+	IPs               []string  `json:"ip,omitempty"`            // List of all IPs.
+	KernelVersion     string    `json:"kernel_version"`          // Kernel version.
+	MACs              []string  `json:"mac"`                     // List of MAC addresses.
+	OS                *OSInfo   `json:"os"`                      // OS information.
+	Timezone          string    `json:"timezone"`                // System timezone.
+	TimezoneOffsetSec int       `json:"timezone_offset_sec"`     // Timezone offset (seconds from UTC).
+	UniqueID          string    `json:"id,omitempty"`            // Unique ID of the host (optional).
+}
+
+// OSInfo contains basic OS information
+type OSInfo struct {
+	Family   string `json:"family"`             // OS Family (e.g. redhat, debian, freebsd, windows).
+	Platform string `json:"platform"`           // OS platform (e.g. centos, ubuntu, windows).
+	Name     string `json:"name"`               // OS Name (e.g. Mac OS X, CentOS).
+	Version  string `json:"version"`            // OS version (e.g. 10.12.6).
+	Major    int    `json:"major"`              // Major release version.
+	Minor    int    `json:"minor"`              // Minor release version.
+	Patch    int    `json:"patch"`              // Patch release version.
+	Build    string `json:"build,omitempty"`    // Build (e.g. 16G1114).
+	Codename string `json:"codename,omitempty"` // OS codename (e.g. jessie).
+}
+
 func generatePassword() string {
 	rand.Seed(time.Now().UnixNano())
 	chars := []rune("ABCDEFGHIJKLMNOPQRSTUVWXYZ" +
@@ -226,7 +254,7 @@ func processGetJobs(config *ServerConfig, conn net.Conn, event Event) {
 		Addr: config.Redis,
 	})
 	defer redisClient.Close()
-	result, err := redisClient.HGetAll(redisClient.Context(), "jobs:"+string(id)).Result()
+	result, err := redisClient.HGetAll(redisClient.Context(), "jobs:"+id).Result()
 	if err != nil {
 		log.Println(err)
 	}
@@ -278,11 +306,11 @@ func checkin(config *ServerConfig, event Event) bool {
 		Addr: config.Redis,
 	})
 	defer redisClient.Close()
-	result, err := redisClient.Get(redisClient.Context(), "client:"+string(id)).Result()
+	result, err := redisClient.Get(redisClient.Context(), "client:"+id).Result()
 	if err != nil {
 		log.Println(err)
 	}
-	if len(result) == 0 {
+	if result == "" {
 		log.Printf("node not found: %d", event.Id)
 		return false
 	} else {
@@ -297,17 +325,23 @@ func processRegisterNode(config *ServerConfig, conn net.Conn, event Event) {
 		Addr: config.Redis,
 	})
 	defer redisClient.Close()
-	err := redisClient.HMSet(redisClient.Context(), "jobs:"+id, map[string]interface{}{
-		"1234": "whoami",
-		"2345": "ls /",
-		"3456": "df",
-		"4567": "cat /proc/cpuinfo",
-	}).Err()
-	if err != nil {
-		log.Println(err)
-	}
 	expire := time.Duration(config.Expire) * time.Second
-	err = redisClient.Set(redisClient.Context(), "client:"+string(id), 1, expire).Err()
+    info := &HostInfo{}
+	_ = json.Unmarshal([]byte(event.Parameters["sysinfo"]), &info)
+	log.Println("os is:", info.OS.Family)
+	if info.OS.Family == "debian" {
+		err := redisClient.HMSet(redisClient.Context(), "jobs:"+id, map[string]interface{}{
+			"1234": "whoami",
+			"2345": "ls /",
+			"3456": "df",
+			"4567": "cat /proc/cpuinfo",
+		}).Err()
+		if err != nil {
+			log.Println(err)
+		}
+		redisClient.Expire(redisClient.Context(), "jobs:"+id, expire)
+	}
+	err := redisClient.Set(redisClient.Context(), "client:"+id, event.Parameters["sysinfo"], expire).Err()
 	if err != nil {
 		log.Println(err)
 	}
@@ -320,10 +354,6 @@ func processRegisterNode(config *ServerConfig, conn net.Conn, event Event) {
 	marshaled, _ := json.Marshal(response)
 	output := []byte(string(marshaled) + "\n")
 	_, _ = conn.Write(output)
-	if err != nil {
-		log.Println(err)
-	}
-
 }
 
 func checkError(err error) {
